@@ -936,6 +936,37 @@ if (window.innerWidth < 480) {
   // ✅ เก็บไฟล์เสียง “ตอบถูก” ของข้อปัจจุบัน (ตั้งค่าในตอน dropQuestionStripByName)
   let currentCorrectSfx = null;
 
+  /* ===== Audio Pool (reuse element/decoded data) ===== */
+const audioPool = new Map(); // src -> Audio[]
+
+function getAudioNode(src){
+  let arr = audioPool.get(src);
+  if (!arr){ arr = []; audioPool.set(src, arr); }
+
+  // หาแชนแนลว่างก่อน
+  const idle = arr.find(a => a.paused || a.ended);
+  if (idle){ idle.currentTime = 0; return idle; }
+
+  // จำกัด pool ต่อ src ประมาณ 3 แชนแนล
+  if (arr.length >= 3){
+    const a = arr[0];
+    a.currentTime = 0;
+    return a;
+  }
+
+  const a = new Audio(src);
+  a.preload = 'auto';
+  arr.push(a);
+  return a;
+}
+
+function playAudio(src, vol=1){
+  if (!src) return;
+  const a = getAudioNode(src);
+  a.volume = Math.max(0, Math.min(1, vol));
+  a.muted  = false;           // ไม่ผูก mute กับ BGM
+  a.play().catch(()=>{});
+}
 
 function applyBackendVolume(){ if(bgm)bgm.volume=VOL_BGM; if(selectSound)selectSound.volume=VOL_SELECT; if(hitSound)hitSound.volume=VOL_HIT; if(winSound)winSound.volume=VOL_WIN; } applyBackendVolume();
 
@@ -1413,12 +1444,8 @@ function tryAnswer(el){
   // 🔊 เล่นเสียงตามผลลัพธ์ (ถูก/ผิด)
   try{
 if (ok){
-  if (currentCorrectSfx){
-    const a = new Audio(currentCorrectSfx);
-    a.volume = 0.9;
-    a.muted  = false; // ✅ ไม่ผูกกับ mute ของ BGM
-    a.play();
-  } else {
+  if (currentCorrectSfx) playAudio(currentCorrectSfx, 0.9);
+  else {
     const s = selectSound?.cloneNode(true);
     if (s){ s.muted = false; s.play?.(); } 
   }
@@ -1426,7 +1453,6 @@ if (ok){
   const h = hitSound?.cloneNode(true);
   if (h){ h.muted = false; h.play?.(); }
 }
-
   }catch(_){}
 
   // เอฟเฟกต์ใหม่: ขยายแล้วหดจนหายไป
@@ -1501,6 +1527,7 @@ flyScoreForEl(pickedElOrNull || null, ok); // แสดง +1/-1 ตรงกล
 
     round++; updateHUD();
     if(qImg){ qImg.style.display='none'; qImg.removeAttribute('src'); }
+    prefetchUpcomingAudio(window.currentLevel, 8); // 🔁 เติมคิวเสียงของข้อที่จะถึง
 
     // ไม่จบด้วยคะแนน/จำนวนรอบอีกต่อไป — เล่นวนไปจนกว่าจะครบ 2 นาที
     nextRound();
@@ -2727,6 +2754,56 @@ let __orderL1=[], __idxL1=0; // ด่าน 1 : LEVEL1_BANK
 let __orderL2=[], __idxL2=0; // ด่าน 2 : NEEDS_BANK
 let __orderL3=[], __idxL3=0; // ด่าน 3 : LEVEL3_BANK
 
+  /* ===== Rolling Prefetch (เสียงของข้อถัด ๆ ไป) ===== */
+function getBankForLevel(lv){
+  switch (lv) {
+    case 1: return L1_BANK_NEW;
+    case 2: return L2_BANK_NEW;
+    case 3: return L3_BANK_NEW;
+    case 4: return L4_BANK_NEW;
+    default: return [];
+  }
+}
+function getOrderAndIndex(lv){
+  switch (lv){
+    case 1: return [__orderN1, __idxN1];
+    case 2: return [__orderN2, __idxN2];
+    case 3: return [__orderN3, __idxN3];
+    case 4: return [__orderN4, __idxN4];
+    default: return [[], 0];
+  }
+}
+function peekNextPrompts(lv, k=10){
+  const bank = getBankForLevel(lv);
+  const [order, idx] = getOrderAndIndex(lv);
+  if (!order?.length) return [];
+  const out=[];
+  for (let i=0; i<Math.min(k, order.length); i++){
+    const pos = (idx + i) % order.length;
+    out.push(bank[order[pos]].prompt);
+  }
+  return out;
+}
+
+// อุ่นเสียงแบบเบา ๆ (ไม่ต้องพึ่งฟังก์ชันพรีโหลดอื่น)
+const __audWarmMemo = new Set();
+function warmAudio(src){
+  if (!src || __audWarmMemo.has(src)) return;
+  __audWarmMemo.add(src);
+  const a = getAudioNode(src); // สร้างในพูล + preload
+  try{ a.load?.(); }catch(_){}
+}
+
+function prefetchUpcomingAudio(lv, k=10){
+  const names = peekNextPrompts(lv, k);
+  for (const n of names){
+    const conf = QUESTION_ASSETS[n];
+    if (!conf) continue;
+    if (conf.audio)      warmAudio(new URL(conf.audio, location.href).href);
+    if (conf.correctSfx) warmAudio(new URL(conf.correctSfx, location.href).href);
+  }
+}
+
 function drawQuestion(){
   // ใช้ชุดใหม่ 3 ด่านที่อิง “ชื่อข้อ” → นำชื่อขอไป render แถบภาพจาก QUESTION_ASSETS
   if (window.currentLevel === 1){
@@ -2808,6 +2885,7 @@ async function startGame(){
   overlay.style.visibility='hidden'; overlay.style.opacity='0';
   score=0; round=0; updateHUD();
   startGameTimer();     // เดิมมีอยู่แล้ว
+  prefetchUpcomingAudio(window.currentLevel, 12); // 🔥 อุ่นเสียงล่วงหน้า ~12 ข้อ
   nextRound();          // เดิมมีอยู่แล้ว
 }
 
@@ -3163,6 +3241,7 @@ function getMissionTitle(lv){
 
 </body>
 </html>
+
 
 
 
