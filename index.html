@@ -968,6 +968,30 @@ function playAudio(src, vol=1){
   a.play().catch(()=>{});
 }
 
+  // 🔇 หยุดเสียงทุกอย่าง (qAudio + แชนแนลใน audioPool)
+// ถ้า resetQ == true จะเคลียร์ src ของ qAudio กัน resume ซ้อน
+function stopAllAudio(resetQ=false){
+  try{
+    // หยุด BGM แต่ยังให้เรียกเล่นใหม่ได้
+    document.getElementById('bgm')?.pause?.();
+    // หยุดเสียงคำถามหลัก
+    const qa = document.getElementById('qAudio');
+    if (qa){
+      qa.pause();
+      qa.currentTime = 0;
+      if (resetQ) qa.removeAttribute('src');
+    }
+    // หยุดทุกแชนแนลในพูล
+    if (typeof audioPool !== 'undefined'){
+      for (const arr of audioPool.values()){
+        for (const a of arr){
+          try{ a.pause(); a.currentTime = 0; }catch(_){}
+        }
+      }
+    }
+  }catch(_){}
+}
+
 function applyBackendVolume(){ if(bgm)bgm.volume=VOL_BGM; if(selectSound)selectSound.volume=VOL_SELECT; if(hitSound)hitSound.volume=VOL_HIT; if(winSound)winSound.volume=VOL_WIN; } applyBackendVolume();
 
 // ✅ เช็คเฉพาะสถานะ mute ของ BGM
@@ -1185,16 +1209,18 @@ function dropQuestionStripByName(qName){
   });
 
   // เล่นเสียงประกอบคำถาม + ตั้งเสียงถูกของข้อ
-  currentCorrectSfx = conf.correctSfx || null;     // ✅ เก็บเสียงตอบถูกไว้ใช้ตอนคลิก
-  if (qAudio){
-    try{
-      qAudio.pause();
-      qAudio.currentTime = 0;
-      qAudio.src = conf.audio || '';
-      qAudio.volume = VOL_QAUDIO;
-      if (conf.audio) qAudio.play()?.catch(()=>{});
-    }catch(_){}
-  }
+currentCorrectSfx = conf.correctSfx || null;
+if (qAudio){
+  try{
+    // ถ้าเกมจบแล้ว อย่าเริ่มเสียงใหม่
+    if (window.ended) return;
+    qAudio.pause();
+    qAudio.currentTime = 0;
+    qAudio.src = conf.audio || '';
+    qAudio.volume = VOL_QAUDIO;
+    if (!window.ended && conf.audio) qAudio.play()?.catch(()=>{});
+  }catch(_){}
+}
 }
 
 /* helper: สไลด์ #qStrip ออกซ้าย/ขวา (ใช้ตอนตอบ) */
@@ -2916,11 +2942,11 @@ async function startGame(){
 
     // ★ ใส่อีโมจิตามช่วงคะแนน
     const badgeEl = document.getElementById('scoreBadge');
-    badgeEl.textContent = getBadgeEmoji(score);
+badgeEl.textContent = getBadgeEmoji(score);
 
-    bgm?.pause?.();
-    try{ qAudio?.pause(); }catch(_){}
-    winSound?.play?.().catch(()=>{});
+// 🔇 ปิดเสียงทุกอย่างให้เกลี้ยง และเคลียร์ src ของ qAudio กันเล่นต่อ
+stopAllAudio(true);
+winSound?.play?.().catch(()=>{});
 
     overlay.style.visibility = 'visible';
     overlay.style.opacity    = '1';
@@ -3241,6 +3267,7 @@ function getMissionTitle(lv){
 
 </body>
 </html>
+
 
 
 
