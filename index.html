@@ -2839,14 +2839,14 @@ async function startGame(){
     overlay.style.opacity    = '1';
   }
 
-
   function getBadgeEmoji(sc){
-    if (sc <= 5)  return '❤️';    // 0–5
-    if (sc <= 10) return '🥇';    // 6–10
-    if (sc <= 15) return '🏆';    // 11–15
+    if (sc <= 5)  return '🐥';    
+    if (sc <= 8) return '🦣';    
+    if (sc <= 12) return '🐅';   
+    if (sc <= 15) return '🐦‍🔥';  
+    if (sc <= 20) return '🐉';    
     return '🏆';
   }
-
 
 function pauseGame(){
   if(!running||paused) return;
@@ -3154,6 +3154,7 @@ function getMissionTitle(lv){
 
 </body>
 </html>
+
 
 
 
