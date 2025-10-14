@@ -2620,6 +2620,15 @@ function collectAllGameImages(){
   if (Array.isArray(LEVEL1_BANK)) LEVEL1_BANK.forEach(q => q?.img && uniq.add(q.img));
   if (Array.isArray(NEEDS_BANK))  NEEDS_BANK.forEach(q  => q?.img && uniq.add(q.img));
   if (Array.isArray(LEVEL3_BANK)) LEVEL3_BANK.forEach(q => q?.img && uniq.add(q.img));
+    // จาก QUESTION_ASSETS (แถบภาพหลายรูปต่อข้อ)
+  if (QUESTION_ASSETS && typeof QUESTION_ASSETS === 'object') {
+    for (const key of Object.keys(QUESTION_ASSETS)) {
+      const conf = QUESTION_ASSETS[key];
+      if (conf?.images && Array.isArray(conf.images)) {
+        conf.images.forEach(p => p && uniq.add(p));
+      }
+    }
+  }
 
   // แปลงให้เป็น URL ที่อิงจากหน้าเว็บปัจจุบัน (กันพาธ relative เพี้ยน)
   return [...uniq].map(p => new URL(p, location.href).href);
@@ -3154,6 +3163,7 @@ function getMissionTitle(lv){
 
 </body>
 </html>
+
 
 
 
